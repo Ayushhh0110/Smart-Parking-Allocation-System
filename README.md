@@ -159,7 +159,7 @@ db.mode=mysql
 mysql.driver=com.mysql.cj.jdbc.Driver
 mysql.url=jdbc:mysql://localhost:3306/smart_parking_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
 mysql.user=root
-mysql.password=ANIMESH2007P
+mysql.password=your_password
 ```
 3. Run the application. The system will connect and populate `smart_parking_db` automatically.
 
