@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "🌐 Run Web Dashboard (http://localhost:8080)",
+            "request": "launch",
+            "mainClass": "com.smartparking.MainApp",
+            "args": "--web",
+            "console": "integratedTerminal",
+            "vmArgs": "-Dspring.classformat.ignore=true"
+        },
+        {
+            "type": "java",
+            "name": "💻 Run Interactive Console Menu",
+            "request": "launch",
+            "mainClass": "com.smartparking.MainApp",
+            "console": "integratedTerminal",
+            "vmArgs": "-Dspring.classformat.ignore=true"
+        },
+        {
+            "type": "java",
+            "name": "🧪 Run Automated Verification Demo (--demo)",
+            "request": "launch",
+            "mainClass": "com.smartparking.MainApp",
+            "args": "--demo",
+            "console": "integratedTerminal",
+            "vmArgs": "-Dspring.classformat.ignore=true"
+        }
+    ]
+}
