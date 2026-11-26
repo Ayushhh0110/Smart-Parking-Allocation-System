@@ -1,6 +1,7 @@
 # Smart Parking Allocation System - Execution Evidence & Console Logs
 **Course:** Enterprise Web Applications (CSL273) | **Minor Project**  
 **Student Name:** Animesh Pasrija | **Roll No:** 25CSU028  
+**Student Name:** Ayush Bhat | **Roll No:** 25csu044
 
 This document records the exact, verified console execution outputs for different operational scenarios of the application.
 

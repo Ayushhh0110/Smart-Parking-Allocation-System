@@ -1,6 +1,7 @@
 # Smart Parking Allocation System - Design Note
 **Course:** Enterprise Web Applications (CSL273) | **Minor Project**  
 **Student Name:** Animesh Pasrija | **Roll No:** 25CSU028  
+**Student Name:** Ayush Bhat | **Roll No:** 25csu044
 **Assigned Problem:** Problem Statement 9 (Smart Parking Allocation System)  
 
 ---

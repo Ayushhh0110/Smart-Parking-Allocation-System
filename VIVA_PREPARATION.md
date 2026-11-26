@@ -1,6 +1,7 @@
 # Smart Parking Allocation System - Viva & Live Modification Guide
 **Course:** Enterprise Web Applications (CSL273) | **Minor Project** | **Problem Statement 9**  
 **Student Name:** Animesh Pasrija | **Roll No:** 25CSU028  
+**Student Name:** Ayush Bhat | **Roll No:** 25csu044
 
 This guide prepares you to answer every conceptual question the faculty might ask, and perform any of the 6 live modifications in under 2 minutes.
 
