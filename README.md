@@ -36,7 +36,6 @@ SmartParkingSystem/
 ├── pom.xml                                     # Maven Project Configuration
 ├── README.md                                   # Complete Setup & Execution Guide
 ├── DESIGN_NOTE.md                              # 3-Page Architecture & Design Document
-├── VIVA_PREPARATION.md                         # Viva Q&A & Live Modification Guide
 ├── EXECUTION_EVIDENCE.md                       # Verifiable Console Execution Outputs
 │
 ├── sql/
@@ -112,16 +111,12 @@ SmartParkingSystem/
    ```cmd
    scripts\compile.bat
    ```
-4. **Run Live Web Dashboard (Browser UI on `http://localhost:8080`):**
-   ```cmd
-   scripts\run-web.bat
-   ```
-   *(This launches the server and automatically opens `http://localhost:8080` in your browser).*
-5. Run the interactive console application:
+
+4. Run the interactive console application:
    ```cmd
    scripts\run.bat
    ```
-6. Run the automated end-to-end evaluation demo:
+5. Run the automated end-to-end evaluation demo:
    ```cmd
    scripts\run.bat --demo
    ```
@@ -180,4 +175,3 @@ mysql.password=your_password
 | **Interface with Two Implementations** | ✅ COMPLIANT | `BillingService` has `RegularBillingService` and `WeekendBillingService` |
 | **Four Analytical Reports** | ✅ COMPLIANT | Occupancy Report, Free Slots Breakdown, Vehicle Utilization, and Revenue Report |
 | **Failed / Exceptional Test Scenario** | ✅ COMPLIANT | `SlotNotAvailableException` thrown & handled gracefully when capacity is exhausted |
-| **Viva & Live Modification Ready** | ✅ COMPLIANT | Step-by-step modification guide provided in `VIVA_PREPARATION.md` |

@@ -53,21 +53,6 @@ public class MainApp {
             return;
         }
 
-        // If running in dedicated web server mode
-        if (args.length > 0 && "--web".equalsIgnoreCase(args[0])) {
-            com.smartparking.web.ParkingWebServer webServer = context.getBean(com.smartparking.web.ParkingWebServer.class);
-            webServer.start(8080);
-            System.out.println("[MainApp] Running in dedicated Web Server mode (http://localhost:8080). Press Ctrl+C to stop.");
-            try {
-                Thread.currentThread().join();
-            } catch (InterruptedException e) {
-                System.out.println("[MainApp] Web server interrupted.");
-            }
-            webServer.stop();
-            context.close();
-            return;
-        }
-
         // Interactive Console Menu
         Scanner scanner = new Scanner(System.in);
         boolean running = true;

@@ -3,15 +3,6 @@
     "configurations": [
         {
             "type": "java",
-            "name": "🌐 Run Web Dashboard (http://localhost:8080)",
-            "request": "launch",
-            "mainClass": "com.smartparking.MainApp",
-            "args": "--web",
-            "console": "integratedTerminal",
-            "vmArgs": "-Dspring.classformat.ignore=true"
-        },
-        {
-            "type": "java",
             "name": "💻 Run Interactive Console Menu",
             "request": "launch",
             "mainClass": "com.smartparking.MainApp",
