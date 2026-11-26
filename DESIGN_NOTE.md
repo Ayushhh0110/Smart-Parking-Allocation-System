@@ -1,203 +1,93 @@
 # Smart Parking Allocation System - Design Note
-**Course:** Enterprise Web Applications (CSL273) | **Minor Project**  
+**Course:** Enterprise Web Applications (CSL273) | **Problem Statement 9**  
 **Student Name:** Animesh Pasrija | **Roll No:** 25CSU028  
-**Student Name:** Ayush Bhat | **Roll No:** 25csu044
-**Assigned Problem:** Problem Statement 9 (Smart Parking Allocation System)  
+**Student Name:** Ayush Bhat | **Roll No:** 25CSU044
 
----
-
-## 1. System Architecture & Class Diagram
-
-### High-Level Architecture Overview
-The system follows an enterprise **layered architecture** emphasizing separation of concerns and loose coupling via Spring Core Dependency Injection:
-1. **Presentation / Entry Layer:** `MainApp` provides an interactive console CLI interface and an automated verification harness.
-2. **Concurrency / Worker Layer:** `EntryGateWorker` threads running in an `ExecutorService` pool simulating simultaneous vehicle arrivals at multiple physical gates.
-3. **Business Logic Layer:** 
-   - `ParkingService` orchestrates vehicle admissions, ticketing, and exit settlements.
-   - `SlotAllocationService` manages in-memory thread-safe collections and nearest-compatible slot allocation.
-   - `BillingService` defines polymorphic pricing schemes (`RegularBillingService` vs `WeekendBillingService`).
-   - `ReportService` computes analytical reporting statistics.
-4. **Persistence Layer:** Repositories (`TicketRepository`, `ParkingSlotRepository`, `VehicleRepository`, `ReportRepository`) interacting with the database via pure JDBC `PreparedStatement` and manual transaction boundaries.
-5. **Database Storage Layer:** Relational tables running in embedded H2 or external MySQL.
-
+## 1. Architecture / Class Diagram
 ```
-+-----------------------------------------------------------------------------------+
-|                              Console Entry (MainApp)                              |
-+-----------------------------------------------------------------------------------+
-                                          |
-                +-------------------------+-------------------------+
-                |                                                   |
-                v                                                   v
-+-------------------------------+                   +-------------------------------+
-|     EntryGateWorker (Gate 1)  |                   |   SimulationRunner (Multi)    |
-|     EntryGateWorker (Gate 2)  |                   +-------------------------------+
-|     EntryGateWorker (Gate 3)  |                                   |
-+-------------------------------+                                   |
-                |                                                   |
-                +-------------------------+-------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                        ParkingService / ParkingServiceImpl                        |
-+-----------------------------------------------------------------------------------+
-             |                                     |                         |
-             v                                     v                         v
-+--------------------------+           +-----------------------+   +--------------------+
-|  SlotAllocationService   |           |    BillingService     |   |  TicketRepository  |
-|  (In-memory Collections  |           |  <<interface>>        |   |  (PreparedStatement|
-|   & ReentrantLock)       |           +-----------------------+   |   & Transactions)  |
-+--------------------------+                   /       \           +--------------------+
-                                              /         \                    |
-                                             v           v                   v
-                            +--------------------+  +-------------------+  Database
-                            |RegularBillingServ. |  |WeekendBillingServ.|  (H2 / MySQL)
-                            +--------------------+  +-------------------+
+MainApp (console menu, --demo) ---> SimulationRunner ---> EntryGateWorker x 3
+      |                                                        |
+      +----------------> ParkingService <----------------------+
+                         (ParkingServiceImpl)
+        +--------------------+---------------------+-------------------+
+        v                    v                     v                   v
+SlotAllocationService   <<interface>>       TicketRepository    VehicleRepository
+        |               BillingService             |                   |
+        v                 /       \                +---------+---------+
+ParkingSlotRepository  Regular   Weekend                     v
+                                                      H2 / MySQL (JDBC)
+MainApp ---> ReportService ---> ReportRepository ---> H2 / MySQL
 ```
+Layers: console and worker threads, services, repositories (JDBC `PreparedStatement`), database.
+Models: `Vehicle`, `ParkingSlot`, `ParkingFloor`, `ParkingTicket`, `Payment`.
 
----
+## 2. Database Schema
 
-## 2. Database Schema Design (Relational DDL)
-
-The system persists multi-level facility structures, vehicles, audit tickets, and checkout payments:
-
-```
-+--------------------+       1:N       +----------------------+
-|   PARKING_FLOORS   |----------------<|    PARKING_SLOTS     |
-+--------------------+                 +----------------------+
-| floor_number (PK)  |                 | slot_id (PK)         |
-| floor_name         |                 | floor_number (FK)    |
-| total_slots        |                 | slot_number          |
-+--------------------+                 | slot_type            |
-                                       | is_available         |
-                                       | proximity_score      |
-                                       +----------------------+
-                                                  |
-                                                  | 1:N
-                                                  v
-+--------------------+       1:N       +----------------------+       1:1       +--------------------+
-|      VEHICLES      |----------------<|   PARKING_TICKETS    |----------------<|      PAYMENTS      |
-+--------------------+                 +----------------------+                 +--------------------+
-| license_plate (PK) |                 | ticket_id (PK, Auto) |                 | payment_id (PK,Auto|
-| vehicle_type       |                 | ticket_number (UQ)   |                 | ticket_id (FK)     |
-| owner_name         |                 | license_plate (FK)   |                 | amount             |
-| contact_number     |                 | slot_id (FK)         |                 | payment_time       |
-| registered_at      |                 | entry_gate           |                 | payment_mode       |
-+--------------------+                 | entry_time           |                 | payment_status     |
-                                       | exit_time            |                 +--------------------+
-                                       | status               |
-                                       | total_amount         |
-                                       | billing_plan         |
-                                       +----------------------+
-```
-
-### Transaction Boundary Justification:
-When a vehicle departs, three interrelated operations must happen atomically:
-1. `parking_tickets` status is updated to `COMPLETED` with timestamp and fare.
-2. A new record is inserted into `payments` with the paid amount and mode.
-3. The assigned slot in `parking_slots` is marked `is_available = TRUE`.
-
-If server power is lost or an error occurs after charging the customer, the slot must not be marked occupied nor the payment orphaned. Thus, `conn.setAutoCommit(false)` is initiated, all statements executed, and committed via `conn.commit()`. If an exception occurs, `conn.rollback()` restores the prior state cleanly.
-
----
-
-## 3. Java Collection Choices & Justification
-
-Per project requirements, at least three meaningful collection types must be chosen and justified:
-
-| Collection Type | Specific Class Used | Role in Smart Parking System | Justification & Complexity |
+| Table | Primary key | Main columns | Foreign keys |
 |---|---|---|---|
-| **1. Sorted Set / Priority Pool** | `TreeSet<ParkingSlot>` (wrapped inside `EnumMap<SlotType, ...>`) | Holds all currently available slots per vehicle type, ordered by `SlotProximityComparator`. | **O(log N)** extraction: Calling `pollFirst()` immediately yields the physically nearest slot (lowest floor number, followed by lowest bay index). Maintains order upon slot re-insertion. |
-| **2. Concurrent Hash Map** | `ConcurrentHashMap<String, ParkingSlot>` | `vehicleToSlotMap`: Maps `licensePlate -> ParkingSlot`. | **O(1)** average-time lookup. Allows lock-free concurrent reads while verifying whether a vehicle is already parked inside the facility, preventing double-entry abuse. |
-| **3. Concurrent Queue** | `ConcurrentLinkedQueue<Vehicle>` | Task queue for each entry gate representing arriving vehicles. | **Lock-free, thread-safe FIFO queue** using Michael-Scott non-blocking queue algorithm. Guarantees that vehicles arriving at the same gate are admitted in order of arrival. |
-| **4. Thread-Safe Hash Set** | `ConcurrentHashMap.newKeySet()` | Global tracking set during concurrent simulations. | **O(1)** atomic set membership test to verify that no two threads claimed the same `slotId`. |
-| **5. Indexed List** | `ArrayList<ParkingTicket>` (via `Collections.synchronizedList`) | Collects tickets issued by the gate threads during the simulation. | Fast index access; synchronized wrapper makes concurrent adds safe. |
----
+| `parking_floors` | floor_number | floor_name, total_slots | - |
+| `parking_slots` | slot_id | floor_number, slot_number, slot_type, is_available, proximity_score | floor_number |
+| `vehicles` | license_plate | vehicle_type, owner_name, contact_number, registered_at | - |
+| `parking_tickets` | ticket_id | ticket_number (unique), license_plate, slot_id, entry_gate, entry_time, exit_time, status, total_amount, billing_plan | license_plate, slot_id |
+| `payments` | payment_id | ticket_id, amount, payment_time, payment_mode, payment_status | ticket_id |
 
-## 4. Multithreading Design & Concurrency Control
+**Checkout transaction:** updating the ticket, inserting the payment and freeing the slot run on one
+connection with `setAutoCommit(false)`. All three are committed together; on an `SQLException` they are
+rolled back, so a payment is never saved without the ticket being closed.
 
-### Concurrency Problem & Shared Resource
-- **Shared Resource:** The pool of vacant `ParkingSlot` objects across all floors.
-- **Race Condition Threat:** Two distinct entry gate threads (e.g. `Gate-1` and `Gate-2`) process arriving cars at the exact same millisecond. If both inspect the available pool and read slot `F1-C01` as free before either marks it occupied, **both cars would be allocated the identical parking bay**. This violates the physical law of parking and corrupts system state.
+## 3. Collection Choices
 
-### Concurrency Control Mechanism
-```
-  [ Gate-1 Thread ]             [ Gate-2 Thread ]             [ Gate-3 Thread ]
-         |                             |                             |
-         v                             v                             v
-  +------------------------------------------------------------------------+
-  |               ReentrantLock (allocationLock.lock())                     |
-  |               CRITICAL SECTION (Atomic Mutual Exclusion)              |
-  |                                                                        |
-  |  1. Check vehicle double-entry in vehicleToSlotMap                     |
-  |  2. Retrieve target TreeSet for vehicle type (BIKE/CAR/EV)             |
-  |  3. Poll nearest slot (pool.pollFirst())                               |
-  |  4. Mark slot.occupy() (isAvailable = false)                           |
-  |  5. Register vehicleToSlotMap.put(plate, slot)                         |
-  |  6. Persist slot status in DB via PreparedStatement                    |
-  |                                                                        |
-  +------------------------------------------------------------------------+
-         |                             |                             |
-         v                             v                             v
-  +------------------------------------------------------------------------+
-  |              ReentrantLock (allocationLock.unlock())                   |
-  +------------------------------------------------------------------------+
-```
+| Collection | Use | Reason |
+|---|---|---|
+| `EnumMap<SlotType, TreeSet<ParkingSlot>>` | Free slots per type | `TreeSet` with `SlotProximityComparator` keeps slots sorted; `pollFirst()` returns the nearest in O(log N). |
+| `ConcurrentHashMap<String, ParkingSlot>` | Vehicle-to-slot mapping, slot lookup by id | O(1) average lookup; used to reject double entry of a vehicle. |
+| `ConcurrentHashMap.newKeySet()` | Occupied slots; duplicate check in simulation | Thread-safe set; `add()` returns false for a repeated slot. |
+| `ConcurrentLinkedQueue<Vehicle>` | Arrival queue of each gate | Thread-safe, non-blocking FIFO order. |
+| Synchronized `ArrayList<ParkingTicket>` | Tickets issued in the simulation | Safe concurrent adds and indexed access. |
 
-1. **Fair ReentrantLock:** `ReentrantLock(true)` guarantees FIFO fairness among gate threads, preventing thread starvation.
-2. **Volatile Slot State:** `ParkingSlot.isAvailable` is marked `volatile` to guarantee immediate memory visibility across CPU caches.
-3. **CountDownLatch Synchronization:** In the test harness, `CountDownLatch startSignal = new CountDownLatch(1)` releases all 3 gate worker threads simultaneously at the exact same millisecond to rigorously stress-test the concurrency boundary.
-4. **Verification Proof:** The concurrency audit tracks `duplicateAllocationsCounter.get() == 0`, confirming that even under heavy multi-gate traffic, zero collisions occur.
-
----
-
-## 5. Spring Core Dependency Injection Diagram
-
-The project leverages Spring Core IoC with annotation-driven configuration:
+## 4. Multithreading Design
+**Shared resource:** the pool of free slots. Without synchronization, concurrent access to the pool
+could corrupt it or give two vehicles the same slot.
 
 ```
-                              @Configuration
-                              (AppConfig.java)
-                                     |
-                                     v
-                        @ComponentScan("com.smartparking")
-                                     |
-               +---------------------+---------------------+
-               |                     |                     |
-               v                     v                     v
-       @Service              @Service              @Repository
-(ParkingServiceImpl)  (SlotAllocationServiceImpl) (TicketRepositoryImpl)
-       |       |                     |                     |
-       |       |                     v                     |
-       |       |            @Repository                    |
-       |       |       (ParkingSlotRepoImpl)               |
-       |       |                                           |
-       |       +-------------------------------------------+
-       |
-       v
-  @Autowired @Qualifier("regularBillingService")
-  BillingService billingService
-       ^
-       |-- RegularBillingService (@Service("regularBillingService"))
-       |-- WeekendBillingService (@Service("weekendBillingService"))
+ Gate-1 thread        Gate-2 thread        Gate-3 thread      (ExecutorService, 3 threads)
+       \                    |                    /
+        +------- allocationLock.lock()  (fair ReentrantLock) -------+
+        | 1. reject if vehicle already parked                       |
+        | 2. pool.pollFirst() for the compatible slot type          |
+        | 3. slot.occupy(), update occupied set and vehicle map     |
+        | 4. update slot availability in the database               |
+        +------------------ allocationLock.unlock() ----------------+
 ```
+- The same lock protects `releaseSlot()`, so allocation and release cannot interleave.
+- `CountDownLatch startSignal` starts all gates together; `doneSignal` waits for them to finish.
+- `ParkingSlot.isAvailable` is `volatile` for visibility between threads.
+- Result of the demo run: 12 vehicles, 12 unique slots, 0 duplicate allocations.
 
-### Loose Coupling Demonstration:
-- `ParkingServiceImpl` depends strictly on the interface `BillingService`, rather than any concrete class.
-- Switching between `RegularBillingService` and `WeekendBillingService` requires zero changes to business logic; it can be achieved by changing the `@Qualifier` annotation value or invoking `setActiveBillingService()`.
+## 5. Spring Dependency Diagram
+```
+AppConfig (@Configuration, @ComponentScan("com.smartparking"))
 
----
+SimulationRunner ----> ParkingService (ParkingServiceImpl)
+ParkingServiceImpl --> SlotAllocationService (SlotAllocationServiceImpl)
+                   --> TicketRepository      (TicketRepositoryImpl)
+                   --> VehicleRepository     (VehicleRepositoryImpl)
+                   --> @Qualifier("regularBillingService") BillingService
+                           |-- RegularBillingService  (injected)
+                           |-- WeekendBillingService  (alternative)
+SlotAllocationServiceImpl --> ParkingSlotRepository (ParkingSlotRepositoryImpl)
+ReportService             --> ReportRepository      (ReportRepositoryImpl)
+```
+Constructor injection is used and services depend on interfaces. The tariff can be changed through the
+`@Qualifier` value, or at runtime with `setActiveBillingService()` (menu option 7).
 
-## 6. Failed / Exceptional Test Case Analysis
-
-### Scenario: Capacity Saturation & Slot Allocation Denial
-- **Objective:** Verify that when the parking capacity for a specific vehicle category is fully exhausted, the system refuses admission gracefully without corrupting database integrity or assigning incompatible bays.
-- **Trigger Condition:** The facility has 7 EV slots. In the demo, 2 are already occupied, so 5 are free. EV vehicles keep arriving until the slots run out.
-- **Expected Behavior:**
-  - The next 5 EVs get slots in order of proximity: `F1-E01`, `F2-E01`, `F2-E02`, `F3-E01`, `F3-E02`.
-  - The 6th arrival triggers `SlotNotAvailableException`:
-    ```
-    com.smartparking.exception.SlotNotAvailableException:
-    PARKING FULL ERROR: No compatible free slot available for vehicle type: EV
-    ```
-  - `MainApp.testSlotFullExceptionScenario()` catches this exception and prints it to the console. Existing tickets and slots remain unchanged.
-- **Verification Result:** The test passed with 100% fidelity during automated execution.
+## 6. Failed / Exceptional Test Case
+- **Objective:** a vehicle must be refused when no compatible slot is free.
+- **Trigger:** the facility has 7 EV slots. In the demo 2 are already occupied, so EVs keep arriving
+  until the remaining 5 are filled (`F1-E01`, `F2-E01`, `F2-E02`, `F3-E01`, `F3-E02`).
+- **Expected and observed:** the 6th arrival throws `SlotNotAvailableException`:
+```
+PARKING FULL ERROR: No compatible free slot available for vehicle type: EV
+```
+- `MainApp.testSlotFullExceptionScenario()` catches it and prints it. No ticket is issued and no
+  incompatible slot is assigned; existing tickets remain unchanged.
