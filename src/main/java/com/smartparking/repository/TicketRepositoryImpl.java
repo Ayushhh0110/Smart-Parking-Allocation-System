@@ -140,7 +140,7 @@ public class TicketRepositoryImpl implements TicketRepository {
      */
     @Override
     public boolean completeTicketAndRecordPaymentTransactional(ParkingTicket ticket, Payment payment) {
-        String updateTicketSql = "UPDATE parking_tickets SET exit_time = ?, status = ?, total_amount = ? WHERE ticket_id = ?";
+        String updateTicketSql = "UPDATE parking_tickets SET exit_time = ?, status = ?, total_amount = ? WHERE ticket_id = ?  AND status = 'ACTIVE'";
         String insertPaymentSql = "INSERT INTO payments (ticket_id, amount, payment_time, payment_mode, payment_status) VALUES (?, ?, ?, ?, ?)";
         String releaseSlotSql = "UPDATE parking_slots SET is_available = TRUE WHERE slot_id = ?";
 

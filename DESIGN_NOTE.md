@@ -110,8 +110,7 @@ Per project requirements, at least three meaningful collection types must be cho
 | **2. Concurrent Hash Map** | `ConcurrentHashMap<String, ParkingSlot>` | `vehicleToSlotMap`: Maps `licensePlate -> ParkingSlot`. | **O(1)** average-time lookup. Allows lock-free concurrent reads while verifying whether a vehicle is already parked inside the facility, preventing double-entry abuse. |
 | **3. Concurrent Queue** | `ConcurrentLinkedQueue<Vehicle>` | Task queue for each entry gate representing arriving vehicles. | **Lock-free, thread-safe FIFO queue** using Michael-Scott non-blocking queue algorithm. Guarantees that vehicles arriving at the same gate are admitted in order of arrival. |
 | **4. Thread-Safe Hash Set** | `ConcurrentHashMap.newKeySet()` | Global tracking set during concurrent simulations. | **O(1)** atomic set membership test to verify that no two threads claimed the same `slotId`. |
-| **5. Indexed List** | `ArrayList<ParkingTicket>` & `CopyOnWriteArrayList` | Audit logs of all issued tickets and historical queries. | Fast random-access indexing and sequential report iteration. |
-
+| **5. Indexed List** | `ArrayList<ParkingTicket>` (via `Collections.synchronizedList`) | Collects tickets issued by the gate threads during the simulation. | Fast index access; synchronized wrapper makes concurrent adds safe. |
 ---
 
 ## 4. Multithreading Design & Concurrency Control
@@ -192,13 +191,13 @@ The project leverages Spring Core IoC with annotation-driven configuration:
 
 ### Scenario: Capacity Saturation & Slot Allocation Denial
 - **Objective:** Verify that when the parking capacity for a specific vehicle category is fully exhausted, the system refuses admission gracefully without corrupting database integrity or assigning incompatible bays.
-- **Trigger Condition:** The facility contains exactly 7 dedicated EV slots across 3 levels (3 on Level 1, 2 on Level 2, 2 on Level 3). Eight consecutive EV vehicles arrive.
-- **Expected Behavior:** 
-  - The first 7 EVs are successfully allocated slots in ascending order of proximity: `F1-E01`, `F1-E02`, `F1-E03`, `F2-E01`, `F2-E02`, `F3-E01`, `F3-E02`.
-  - The 8th EV arrival triggers `SlotNotAvailableException`:
+- **Trigger Condition:** The facility has 7 EV slots. In the demo, 2 are already occupied, so 5 are free. EV vehicles keep arriving until the slots run out.
+- **Expected Behavior:**
+  - The next 5 EVs get slots in order of proximity: `F1-E01`, `F2-E01`, `F2-E02`, `F3-E01`, `F3-E02`.
+  - The 6th arrival triggers `SlotNotAvailableException`:
     ```
-    com.smartparking.exception.SlotNotAvailableException: 
+    com.smartparking.exception.SlotNotAvailableException:
     PARKING FULL ERROR: No compatible free slot available for vehicle type: EV
     ```
-  - The gate worker catches this exception, logs an alert to the console, and leaves all existing active tickets, slots, and database transactions intact.
+  - `MainApp.testSlotFullExceptionScenario()` catches this exception and prints it to the console. Existing tickets and slots remain unchanged.
 - **Verification Result:** The test passed with 100% fidelity during automated execution.
